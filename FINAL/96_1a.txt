@@ -1,0 +1,246 @@
+Perfect! So **X = 96**, making the base network **172.16.126.0/24**.
+
+Let me work out everything first, then walk you through Packet Tracer step by step.
+
+---
+
+## Subnetting: 172.16.126.0/24 → 4 equal subnets
+
+Dividing /24 into 4 subnets = **/26** (64 IPs each, 62 usable)
+
+| Subnet | Network | Mask | Usable Range | Broadcast | Assignment |
+|--------|---------|------|--------------|-----------|------------|
+| 1 | 172.16.126.0/26 | 255.255.255.192 | .1 – .62 | .63 | VLAN 14 (Production) |
+| 2 | 172.16.126.64/26 | 255.255.255.192 | .65 – .126 | .127 | VLAN 24 (Quality) |
+| 3 | 172.16.126.128/26 | 255.255.255.192 | .129 – .190 | .191 | VLAN 34 (Office) |
+| 4 | 172.16.126.192/26 | 255.255.255.192 | .193 – .254 | .255 | Reserved (unused) |
+
+**PC Naming Rule:**
+- One PC → `Production-AbdulRehman` (your name, your choice of VLAN)
+- One PC → `Office-CS231196` (reg number, different VLAN)
+
+---
+
+## STEP-BY-STEP PACKET TRACER GUIDE
+
+### STEP 1 — Place Devices
+
+1. Open Packet Tracer
+2. Add **1 Router** → use `2911` or `1941`
+3. Add **3 Switches** → use `2960`
+4. Add **2 PCs per switch** (6 PCs total)
+5. Label switches: `SW-VLAN14`, `SW-VLAN24`, `SW-VLAN34`
+
+---
+
+### STEP 2 — Cable Everything
+
+| Connection | Cable Type |
+|------------|------------|
+| Router `Gig0/0` → `SW-VLAN14` port `Gig0/1` | **Copper Straight-Through** |
+| Router `Gig0/1` → `SW-VLAN24` port `Gig0/1` | Copper Straight-Through |
+| Router `Gig0/2` → `SW-VLAN34` port `Gig0/1` | Copper Straight-Through |
+| Each PC → its switch (FastEthernet ports) | Copper Straight-Through |
+
+> ⚠️ Actually for Router-on-a-Stick, **all 3 switches connect to ONE router interface** using sub-interfaces. Use a **trunk link** from each switch to the router's single interface. Use `Gig0/0` only and create sub-interfaces on it.
+
+**Corrected cabling:**
+- Router `Gig0/0` → `SW-VLAN14` (`Gig0/1`) — trunk
+- `SW-VLAN14` uplink to router only (no inter-switch links needed)
+- Same pattern for SW-VLAN24 → Router `Gig0/1`, SW-VLAN34 → Router `Gig0/2`
+
+> Since you have a 3-port router, it's cleanest to use **one physical port per switch**, each with a sub-interface. This is still Router-on-a-Stick per VLAN.
+
+---
+
+### STEP 3 — Configure Each Switch (CLI)
+
+#### SW-VLAN14
+```
+enable
+conf t
+vlan 14
+ name Production_Floor
+exit
+interface fa0/1
+ switchport mode access
+ switchport access vlan 14
+exit
+interface fa0/2
+ switchport mode access
+ switchport access vlan 14
+exit
+interface gig0/1
+ switchport mode trunk
+exit
+end
+wr
+```
+
+#### SW-VLAN24
+```
+enable
+conf t
+vlan 24
+ name Quality_Control
+exit
+interface fa0/1
+ switchport mode access
+ switchport access vlan 24
+exit
+interface fa0/2
+ switchport mode access
+ switchport access vlan 24
+exit
+interface gig0/1
+ switchport mode trunk
+exit
+end
+wr
+```
+
+#### SW-VLAN34
+```
+enable
+conf t
+vlan 34
+ name Office_Staff
+exit
+interface fa0/1
+ switchport mode access
+ switchport access vlan 34
+exit
+interface fa0/2
+ switchport mode access
+ switchport access vlan 34
+exit
+interface gig0/1
+ switchport mode trunk
+exit
+end
+wr
+```
+
+---
+
+### STEP 4 — Configure Router Sub-interfaces + DHCP
+
+Go to Router CLI:
+
+```
+enable
+conf t
+
+! ── VLAN 14 sub-interface ──
+interface gig0/0
+ no shutdown
+exit
+
+interface gig0/0.14
+ encapsulation dot1Q 14
+ ip address 172.16.126.1 255.255.255.192
+ no shutdown
+exit
+
+! ── VLAN 24 sub-interface ──
+interface gig0/1
+ no shutdown
+exit
+
+interface gig0/1.24
+ encapsulation dot1Q 24
+ ip address 172.16.126.65 255.255.255.192
+ no shutdown
+exit
+
+! ── VLAN 34 sub-interface ──
+interface gig0/2
+ no shutdown
+exit
+
+interface gig0/2.34
+ encapsulation dot1Q 34
+ ip address 172.16.126.129 255.255.255.192
+ no shutdown
+exit
+
+! ── DHCP Pools ──
+ip dhcp excluded-address 172.16.126.1 172.16.126.5
+ip dhcp excluded-address 172.16.126.65 172.16.126.69
+ip dhcp excluded-address 172.16.126.129 172.16.126.133
+
+ip dhcp pool VLAN14-Production
+ network 172.16.126.0 255.255.255.192
+ default-router 172.16.126.1
+ dns-server 8.8.8.8
+exit
+
+ip dhcp pool VLAN24-Quality
+ network 172.16.126.64 255.255.255.192
+ default-router 172.16.126.65
+ dns-server 8.8.8.8
+exit
+
+ip dhcp pool VLAN34-Office
+ network 172.16.126.128 255.255.255.192
+ default-router 172.16.126.129
+ dns-server 8.8.8.8
+exit
+
+end
+wr
+```
+
+---
+
+### STEP 5 — Rename PCs
+
+Click each PC → **Config tab** → **Display Name** field:
+
+| PC | Switch | Name |
+|----|--------|------|
+| PC1 on SW-VLAN14 | Production | `Production-AbdulRehman` |
+| PC2 on SW-VLAN14 | Production | `Production-PC2` |
+| PC1 on SW-VLAN34 | Office | `Office-CS231196` |
+| PC2 on SW-VLAN34 | Office | `Office-PC2` |
+| PCs on SW-VLAN24 | Quality | `QC-PC1`, `QC-PC2` |
+
+---
+
+### STEP 6 — Set PCs to DHCP
+
+Click each PC → **Desktop tab** → **IP Configuration** → select **DHCP**
+
+Each PC should auto-receive an IP from its subnet within seconds.
+
+---
+
+### STEP 7 — Verify & Test
+
+**On any PC → Desktop → Command Prompt:**
+
+```
+ipconfig
+```
+Confirm it received an IP in the correct range.
+
+Then ping across VLANs:
+```
+ping 172.16.126.65
+ping 172.16.126.129
+```
+
+Both should succeed since the router handles inter-VLAN routing.
+
+---
+
+## Summary Cheat Sheet
+
+| VLAN | Name | Network | Gateway | DHCP Range |
+|------|------|---------|---------|------------|
+| 14 | Production Floor | 172.16.126.0/26 | .1 | .6 – .62 |
+| 24 | Quality Control | 172.16.126.64/26 | .65 | .70 – .126 |
+| 34 | Office Staff | 172.16.126.128/26 | .129 | .134 – .190 |
+| — | Reserved | 172.16.126.192/26 | — | Unused |
+
+Good luck on your final! Let me know if anything doesn't work in Packet Tracer.
