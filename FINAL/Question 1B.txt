@@ -1,0 +1,319 @@
+## Question 2 Complete Solution
+
+**Reg No: CS231196 → R = 96 (even) → Use RIP v2**
+
+---
+
+## IP Addressing Plan
+
+| Network | Address | Usage |
+|---------|---------|-------|
+| Site A (LAN 1) | 172.16.96.0/24 | Router A + Switch + 2 PCs |
+| Site B (LAN 2) | 172.16.146.0/24 | Router B + Switch + 2 PCs |
+| Router-to-Router | 10.10.10.96/30 | WAN link |
+| Server Network | 172.16.96.0/24 | DHCP, DNS, Web, FTP, Email (on Router A side) |
+
+> Server network shares Site A's subnet — place all servers on a separate switch connected to Router A.
+
+---
+
+## IP Assignments
+
+| Device | Interface | IP | Gateway |
+|--------|-----------|-----|---------|
+| Router A | Gig0/0 (LAN/Servers) | 172.16.96.1 | — |
+| Router A | Gig0/1 (Site A LAN) | 172.16.96.1* | — |
+| Router A | Gig0/2 (WAN) | 10.10.10.97 | — |
+| Router B | Gig0/0 (Site B LAN) | 172.16.146.1 | — |
+| Router B | Gig0/1 (WAN) | 10.10.10.98 | — |
+| DHCP Server | Fa0 | 172.16.96.2 | 172.16.96.1 |
+| DNS Server | Fa0 | 172.16.96.3 | 172.16.96.1 |
+| Web Server | Fa0 | 172.16.96.4 | 172.16.96.1 |
+| FTP Server | Fa0 | 172.16.96.5 | 172.16.96.1 |
+| Email Server | Fa0 | 172.16.96.6 | 172.16.96.1 |
+| Site A PCs | DHCP | auto | 172.16.96.1 |
+| Site B PCs | DHCP (via helper) | auto | 172.16.146.1 |
+
+*Use separate interfaces on Router A for server network vs Site A LAN, or use one interface with a separate switch.*
+
+---
+
+## STEP-BY-STEP PACKET TRACER
+
+### STEP 1 — Place Devices
+
+Add these devices:
+- **2 Routers** → `2911` (Router-A, Router-B)
+- **3 Switches** → `2960` (SW-SiteA, SW-SiteB, SW-Servers)
+- **2 PCs** on SW-SiteA
+- **2 PCs** on SW-SiteB
+- **5 Servers** on SW-Servers: name them `DHCP-Server`, `DNS-Server`, `Web-Server`, `FTP-Server`, `Email-Server`
+
+---
+
+### STEP 2 — Cable Everything
+
+| From | To | Cable |
+|------|----|-------|
+| Router-A Gig0/0 | SW-Servers Gig0/1 | Straight-through |
+| Router-A Gig0/1 | SW-SiteA Gig0/1 | Straight-through |
+| Router-A Gig0/2 | Router-B Gig0/1 | **Cross-over** or Serial |
+| Router-B Gig0/0 | SW-SiteB Gig0/1 | Straight-through |
+| All PCs/Servers | their switches (Fa ports) | Straight-through |
+
+---
+
+### STEP 3 — Configure Router A (CLI)
+
+```
+enable
+conf t
+hostname Router-A
+
+! Server-facing interface
+interface gig0/0
+ ip address 172.16.96.1 255.255.255.0
+ no shutdown
+exit
+
+! Site A LAN interface
+interface gig0/1
+ ip address 172.16.97.1 255.255.255.0
+ ip helper-address 172.16.96.2
+ no shutdown
+exit
+
+! WAN interface
+interface gig0/2
+ ip address 10.10.10.97 255.255.255.252
+ no shutdown
+exit
+
+! RIP v2
+router rip
+ version 2
+ no auto-summary
+ network 172.16.96.0
+ network 172.16.97.0
+ network 10.10.10.96
+exit
+
+end
+wr
+```
+
+> `ip helper-address` points Site A PCs to the DHCP server for automatic IP assignment.
+
+---
+
+### STEP 4 — Configure Router B (CLI)
+
+```
+enable
+conf t
+hostname Router-B
+
+! Site B LAN
+interface gig0/0
+ ip address 172.16.146.1 255.255.255.0
+ ip helper-address 172.16.96.2
+ no shutdown
+exit
+
+! WAN
+interface gig0/1
+ ip address 10.10.10.98 255.255.255.252
+ no shutdown
+exit
+
+! RIP v2
+router rip
+ version 2
+ no auto-summary
+ network 172.16.146.0
+ network 10.10.10.96
+exit
+
+end
+wr
+```
+
+---
+
+### STEP 5 — Assign Static IPs to All Servers
+
+Click each server → **Desktop → IP Configuration → Static**
+
+| Server | IP | Mask | Gateway |
+|--------|----|------|---------|
+| DHCP-Server | 172.16.96.2 | 255.255.255.0 | 172.16.96.1 |
+| DNS-Server | 172.16.96.3 | 255.255.255.0 | 172.16.96.1 |
+| Web-Server | 172.16.96.4 | 255.255.255.0 | 172.16.96.1 |
+| FTP-Server | 172.16.96.5 | 255.255.255.0 | 172.16.96.1 |
+| Email-Server | 172.16.96.6 | 255.255.255.0 | 172.16.96.1 |
+
+---
+
+### STEP 6 — Configure DHCP Server
+
+Click **DHCP-Server → Services → DHCP**
+
+Create **two pools:**
+
+**Pool 1 — Site A:**
+- Pool Name: `SiteA-Pool`
+- Default Gateway: `172.16.97.1`
+- DNS Server: `172.16.96.3`
+- Start IP: `172.16.97.10`
+- Subnet Mask: `255.255.255.0`
+- Max Users: `50`
+- Click **Add**
+
+**Pool 2 — Site B:**
+- Pool Name: `SiteB-Pool`
+- Default Gateway: `172.16.146.1`
+- DNS Server: `172.16.96.3`
+- Start IP: `172.16.146.10`
+- Subnet Mask: `255.255.255.0`
+- Max Users: `50`
+- Click **Add**
+
+Turn **Service: ON**
+
+---
+
+### STEP 7 — Configure DNS Server
+
+Click **DNS-Server → Services → DNS**
+
+Turn **DNS Service: ON**
+
+Add these records:
+
+| Name | Type | Address |
+|------|------|---------|
+| `www.cs231196.local` | A Record | `172.16.96.4` |
+
+Click **Add** after each entry.
+
+---
+
+### STEP 8 — Configure Web Server
+
+Click **Web-Server → Services → HTTP**
+
+Make sure HTTP is **ON**, then click **Edit** on `index.html`:
+
+Find the default text and add your line:
+```html
+<p>Designed by Abdul Rehman - CS231196</p>
+```
+
+Save it.
+
+---
+
+### STEP 9 — Configure FTP Server
+
+Click **FTP-Server → Services → FTP**
+
+Turn **FTP Service: ON**
+
+Add user:
+- Username: `AbdulRehman`
+- Password: `CS231196`
+- Permissions: check **Read, Write, Delete, Rename, List**
+- Click **Add**
+
+---
+
+### STEP 10 — Configure Email Server
+
+Click **Email-Server → Services → Email**
+
+- Domain Name: `cs231196.local`
+- Turn **SMTP and POP3: ON**
+
+Add users:
+
+| Username | Password |
+|----------|----------|
+| `abdulrehman` | `CS231196` |
+| `cs231196` | `CS231196` |
+
+Click **+** / **Set** after each.
+
+---
+
+### STEP 11 — Configure Email Clients on PCs
+
+On **any PC → Desktop → Email**:
+
+- Your Name: `Abdul Rehman`
+- Email Address: `abdulrehman@cs231196.local`
+- Incoming/Outgoing Mail Server: `172.16.96.6`
+- Username: `abdulrehman`
+- Password: `CS231196`
+- Click **Save**
+
+Do the same on a second PC with the `cs231196` account, then **Compose → Send** a test email between them.
+
+---
+
+### STEP 12 — Set PCs to DHCP
+
+Click each PC → **Desktop → IP Configuration → DHCP**
+
+They should auto-receive IPs from their respective pools via the `ip helper-address`.
+
+---
+
+### STEP 13 — Verify Everything
+
+**Test 1 — Web via domain name:**
+PC → Desktop → Web Browser → type:
+```
+www.cs231196.local
+```
+Should load your personalized page.
+
+**Test 2 — FTP login:**
+PC → Desktop → Command Prompt:
+```
+ftp 172.16.96.5
+Username: AbdulRehman
+Password: CS231196
+```
+
+**Test 3 — Email:**
+Send email from one PC account to the other and verify receipt.
+
+**Test 4 — Routing table:**
+On both routers:
+```
+show ip route
+```
+You should see `R` (RIP) routes for remote networks.
+
+**Test 5 — Cross-site ping:**
+```
+ping 172.16.146.1
+```
+
+---
+
+## Quick Reference Summary
+
+| Item | Value |
+|------|-------|
+| Routing Protocol | RIP v2 (96 is even) |
+| Site A Network | 172.16.96.0/24 |
+| Site A LAN | 172.16.97.0/24 |
+| Site B Network | 172.16.146.0/24 |
+| WAN Link | 10.10.10.96/30 |
+| DNS Domain | www.cs231196.local |
+| FTP User | AbdulRehman / CS231196 |
+| Email Domain | cs231196.local |
+| Web Page Line | Designed by Abdul Rehman - CS231196 |
+
+Good luck on your final! Let me know if you hit any issues in Packet Tracer.
